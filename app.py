@@ -9,6 +9,7 @@ import tempfile
 from groq import Groq
 import camelot
 from dotenv import load_dotenv
+import json5  
 
 
 load_dotenv()
@@ -207,26 +208,25 @@ def sanitize_json(obj):
 
 
 def parse_json(txt):
-    # Remove ```json or ``` fences
+    """
+    Parse AI-generated JSON robustly.
+    - Removes ```json fences
+    - Uses json5 for tolerant parsing
+    - Falls back to raw text if parsing fails
+    """
+    # Strip ```json fences
     txt = re.sub(r"^```(?:json)?\s*", "", txt.strip())
     txt = re.sub(r"\s*```$", "", txt.strip())
 
-    # Remove trailing commas before } or ]
-    txt = re.sub(r",(\s*[}\]])", r"\1", txt)
-
-    # Extract first {...} block
+    # Try extracting first JSON-like block
     match = re.search(r"\{.*\}", txt, re.DOTALL)
-    if not match:
-        return {"error": "No JSON found", "raw_output": txt}
+    json_str = match.group() if match else txt
 
-    json_str = match.group()
     try:
-        parsed = json.loads(json_str)
+        parsed = json5.loads(json_str)
         return sanitize_json(parsed)
     except Exception as e:
-        # If still fails, return raw
         return {"error": str(e), "raw_output": json_str}
-
 
 
 def process_pdf(pdf_path, api_key):
