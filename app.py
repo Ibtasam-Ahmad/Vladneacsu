@@ -8,12 +8,11 @@ import re
 import tempfile
 from groq import Groq
 import camelot
-import streamlit as st
 from dotenv import load_dotenv
 
 
 load_dotenv()
-api_key = st.secrets["GROQ_API_KEY"]
+api_key = st.secrets["GROQ_API_KEY"] or os.getenv("GROQ_API_KEY")
 
 MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
 MAX_PIXELS = 33166500
@@ -261,8 +260,6 @@ This app extracts **ALL technical information** from steel drawings:
 - JSON-only output (no guessing, flagged uncertainty)
 """)
 
-# API KEY
-api_key = api_key
 
 # FILE UPLOAD
 uploaded_files = st.file_uploader(
