@@ -15,7 +15,7 @@ import json5
 load_dotenv()
 api_key = st.secrets["GROQ_API_KEY"] or os.getenv("GROQ_API_KEY")
 
-MODEL = "llama-3.3-70b-versatile"
+MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
 MAX_PIXELS = 33166500
 
 # ========================= CORE LOGIC (UNCHANGED) =========================
@@ -309,3 +309,4 @@ if st.button("🚀 Extract Information"):
 
 st.divider()
 st.caption("⚙️ Vision + OCR + LLM | No hardcoded fields | Engineering-grade extraction")
+
