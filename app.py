@@ -6,16 +6,16 @@ import json
 import base64
 import re
 import tempfile
-from groq import Groq
+from openai import OpenAI
 import camelot
 from dotenv import load_dotenv
-import json5  
-
+import json5
 
 load_dotenv()
-api_key = st.secrets["GROQ_API_KEY"] or os.getenv("GROQ_API_KEY")
+api_key = st.secrets["OPENAI_API_KEY"] or os.getenv("OPENAI_API_KEY")
+# api_key = os.getenv("OPENAI_API_KEY")
 
-MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
+MODEL = "gpt-4o-mini"  # Use OpenAI's GPT model, adjust based on your needs
 MAX_PIXELS = 33166500
 
 # ========================= CORE LOGIC (UNCHANGED) =========================
@@ -46,7 +46,6 @@ def pdf_to_images(pdf_path, dpi=150):
     return paths
 
 
-
 def extract_ocr(pdf_path, page):
     try:
         tables = camelot.read_pdf(
@@ -66,8 +65,8 @@ def encode_img(p):
 
 
 def extract_json(image, ocr, api_key):
-    client = Groq(api_key=api_key)
-
+    client = OpenAI(api_key=api_key) 
+    # Use OpenAI API to process the extracted drawing and OCR data
     prompt = f"""
         You are an ENGINEERING DRAWING INFORMATION EXTRACTION ENGINE.
 
@@ -175,21 +174,18 @@ def extract_json(image, ocr, api_key):
         {ocr}
     """
 
-    res = client.chat.completions.create(
+    # Make a request to OpenAI API to generate the response
+    response = client.responses.create(
         model=MODEL,
-        temperature=0,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{encode_img(image)}"}
-                }
-            ]
-        }]
+        input=[
+            {"role": "user", "content": prompt},
+            {"role": "user", "content": f"Image Data: data:image/jpeg;base64,{encode_img(image)}"}
+        ]
     )
-    return res.choices[0].message.content
+
+    # Extract and return the result from the API response
+    return response.output_text.strip()
+
 
 def sanitize_json(obj):
     """
@@ -309,4 +305,3 @@ if st.button("🚀 Extract Information"):
 
 st.divider()
 st.caption("⚙️ Vision + OCR + LLM | No hardcoded fields | Engineering-grade extraction")
-
