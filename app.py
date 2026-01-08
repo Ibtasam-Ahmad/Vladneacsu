@@ -15,7 +15,7 @@ load_dotenv()
 api_key = st.secrets["OPENAI_API_KEY"] or os.getenv("OPENAI_API_KEY")
 # api_key = os.getenv("OPENAI_API_KEY")
 
-MODEL = "gpt-4o-mini"  # Use OpenAI's GPT model, adjust based on your needs
+MODEL = "gpt-5-mini"  # Use OpenAI's GPT model, adjust based on your needs
 MAX_PIXELS = 33166500
 
 # ========================= CORE LOGIC (UNCHANGED) =========================
