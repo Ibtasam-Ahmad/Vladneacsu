@@ -1,7 +1,9 @@
-Pillow
-streamlit
-PyMuPDF
-openAI
-camelot-py
+streamlit 
+pillow 
+pymupdf 
+camelot-py 
+openai 
+groq 
+anthropic 
+json5 
 python-dotenv
-json5
