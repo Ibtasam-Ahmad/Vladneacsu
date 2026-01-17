@@ -174,29 +174,128 @@ def extract_json(image, ocr, settings):
         raise ValueError(f"Failed to initialize client for {provider}")
     
     prompt = f"""
-        You are an ENGINEERING DRAWING INFORMATION EXTRACTION ENGINE.
+        You are an ENGINEERING DRAWING INFORMATION EXTRACTION ENGINE specialized in structural steel fabrication and assembly drawings.
 
-        TASK:
+        ## TASK:
         Extract ALL available information from the drawing image and the OCR text provided.
-        The system must handle single-part or multi-part drawings, different designers, and varying layouts.
+        The system must handle:
+        - Single-part and multi-part drawings
+        - Multiple drawing styles and designers
+        - Romanian technical language
+        - Complex layouts with multiple views, tables, and annotations
 
-        ABSOLUTE RULES:
-        - Extract EVERYTHING: all text, numbers, dimensions, tables, annotations.
-        - Extract EACH PART separately, even if multiple parts exist.
-        - Romanian technical language is expected.
-        - Do NOT guess values. If a value cannot be confidently extracted → use null and flag it.
-        - Correlate BOM tables with parts using part marks.
-        - Identify holes using notation like:
-        - "12*D22" → 12 holes Ø22
-        - "2*D18" → 2 holes Ø18
-        - Identify hole locations if possible (e.g., web / flange / unknown).
-        - Include all numeric data with context if derivable (length, area, weight, spacing, etc.).
-        - Capture any notes, annotations, flags, or extra information not explicitly listed below.
-        - If there is any information not included in the JSON template, create new fields under "extra_info" for that part or drawing.
+        ## ABSOLUTE RULES (NON-NEGOTIABLE)
+        - Extract EVERYTHING that is explicitly present: all text, numbers, dimensions,
+        tables, symbols, annotations, notes, and title-block information.
+        - Extract EACH PART separately, even if multiple parts exist on one drawing sheet.
+        - Do NOT guess or infer missing values.
+        - If a value cannot be confidently extracted, return null and add a flag explaining why.
+        - Preserve original wording and numeric values for traceability.
+        - Romanian technical terminology is expected and must be interpreted correctly.
+        - Prefer structured fields over free text whenever possible.
+        - If information does not fit the predefined schema, store it under "additional_info"
+        at the most appropriate level.
+        - Output ONE valid JSON object only. No commentary, no markdown.
 
-        RETURN:
-        - ONE JSON object only, using this exact structure:
+        ## UNITS AND NORMALIZATION
+        - Detect all units (mm, cm, m, kg, t, m², cm², etc.).
+        - Normalize values to standard units:
+        - Length → mm
+        - Weight → kg
+        - Area → m²
+        - Preserve original value and unit in "additional_info".
+        - If unit is implicit (e.g., typical mm), mark confidence as medium.
 
+        ## PART IDENTIFICATION AND CORRELATION
+        - Identify parts using part marks shown near the geometry or in BOM tables.
+        - Correlate BOM table rows with parts using part marks.
+        - Support drawings with:
+        - One main part
+        - Multiple independent parts
+        - Subassemblies
+        - Distinguish between:
+        - Drawing-level information
+        - Subassembly-level information
+        - Part-level information
+
+        ## HOLES
+        - Detect holes on web, flange, or unknown location.
+        - Recognize hole notation patterns such as:
+        - "12*D22" → 12 holes, Ø22 mm
+        - "2×Ø18", "4-⌀14", "8x18"
+        - Extract:
+        - Total hole count
+        - Diameter(s)
+        - Location if indicated
+        - Do NOT infer hole counts or diameters.
+        - Flag partial or unclear hole information.
+
+        ## DIMENSIONS
+        - Extract all numeric dimensions with context when possible:
+        - Length
+        - Spacing
+        - Edge distance
+        - Thickness
+        - Diameter
+        - Detect repeated or shared dimensions (e.g., "TYP.", "SIM.", "SEE DETAIL").
+        - Associate shared dimensions with all applicable parts.
+        - Flag ambiguity when dimension scope is unclear.
+
+        ## MANUFACTURING FEATURES (NON-HOLE)
+        - Identify and extract features such as:
+        - Slots
+        - Cutouts
+        - Chamfers
+        - Notches
+        - Bevels
+        - End plates
+        - If dimensions are present, extract them.
+        - If feature type is unclear, label as "unknown" and flag.
+
+        ## WELDS
+        - Detect weld symbols and annotations.
+        - Extract when possible:
+        - Weld type (fillet, butt, unknown)
+        - Size (a, z, throat, leg)
+        - Length (continuous or intermittent)
+        - If only a symbol is present, describe it and flag uncertainty.
+
+        ## SURFACE TREATMENT / FINISH
+        - Extract any surface treatment information, including:
+        - Galvanizing
+        - Painting
+        - Primers
+        - Fire protection
+        - Capture standards or specifications if stated.
+
+        ## BOM TABLES
+        - Extract all BOM tables completely.
+        - Preserve all columns, even if unrecognized.
+        - Correlate BOM entries with parts using part marks.
+        - Do NOT merge or delete rows.
+
+        ## REVISIONS AND TITLE BLOCK
+        - Extract revision history:
+        - Revision index
+        - Date
+        - Description
+        - Extract title-block information when present:
+        - Drawing ID
+        - Project
+        - Date
+        - Scale
+
+        ## CONFIDENCE AND TRACEABILITY
+        - Assign confidence (high | medium | low) to extracted values.
+        - Prefer high confidence only when explicitly stated and unambiguous.
+        - Preserve OCR fragments or drawing references in "additional_info" for traceability.
+        - Flag:
+        - Missing data
+        - Conflicting data
+        - Illegible or partial OCR
+
+        ## RETURN FORMAT (STRICT)
+        Return ONE JSON object using this exact structure:
         {{
         "drawing_meta": {{
             "drawing_id": null,
@@ -205,6 +304,14 @@ def extract_json(image, ocr, settings):
             "project": null,
             "language": "ro",
             "confidence": "high|medium|low",
+            "revisions": [
+            {{
+                "revision": null,
+                "date": null,
+                "description": null,
+                "confidence": "high|medium|low"
+            }}
+            ],
             "additional_info": {{}}
         }},
 
@@ -234,11 +341,38 @@ def extract_json(image, ocr, settings):
                 {{
                 "value": null,
                 "unit": "mm",
-                "context": "length|spacing|edge-distance|unknown",
+                "context": "length|spacing|edge-distance|thickness|diameter|unknown",
                 "confidence": "high|medium|low",
                 "additional_info": {{}}
                 }}
             ],
+
+            "features": [
+                {{
+                "type": "slot|cutout|chamfer|notch|bevel|plate|unknown",
+                "dimensions": [],
+                "confidence": "high|medium|low",
+                "additional_info": {{}}
+                }}
+            ],
+
+            "welds": [
+                {{
+                "type": "fillet|butt|unknown",
+                "size": null,
+                "length_mm": null,
+                "symbol_detected": null,
+                "confidence": "high|medium|low",
+                "additional_info": {{}}
+                }}
+            ],
+
+            "surface_treatment": {{
+                "type": null,
+                "standard": null,
+                "confidence": "high|medium|low",
+                "additional_info": {{}}
+            }},
 
             "notes": [],
             "flags": [],
@@ -268,16 +402,9 @@ def extract_json(image, ocr, settings):
         "additional_info": {{}}
         }}
 
-        INSTRUCTIONS:
-        - Fill as many fields as possible using both OCR text and visual drawing elements.
-        - Maintain confidence levels for each extracted value.
-        - Flag any missing, uncertain, or conflicting information.
-        - Ensure BOM tables are correlated with parts using part marks.
-        - Capture any additional information not explicitly listed in the JSON under "additional_info" at the appropriate level (drawing_meta, parts, holes, dimensions, BOM, etc.).
-        - Preserve all text and numeric data for potential future reference.
-
-        OCR TEXT INPUT:
+        OCR TEXT:
         {ocr}
+
     """
 
     try:
