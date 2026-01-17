@@ -683,52 +683,6 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
-# In the main processing section, after displaying results, add:
-if st.button("📊 Convert to CSV", type="secondary"):
-    # Flatten the JSON data into a DataFrame
-    try:
-        # Extract parts from all pages
-        all_parts = []
-        for page_result in result:
-            page_data = page_result['data']
-            page_num = page_result['page']
-            
-            # Check if parts exist in this page
-            if 'parts' in page_data and page_data['parts']:
-                for part in page_data['parts']:
-                    # Add page number to each part
-                    part_with_meta = part.copy()
-                    part_with_meta['page'] = page_num
-                    if 'drawing_meta' in page_data:
-                        part_with_meta['drawing_id'] = page_data['drawing_meta'].get('drawing_id', '')
-                        part_with_meta['scale'] = page_data['drawing_meta'].get('scale', '')
-                    all_parts.append(part_with_meta)
-        
-        if all_parts:
-            # Normalize the nested JSON structure
-            df = pd.json_normalize(all_parts)
-            
-            # Display the DataFrame
-            st.subheader("📋 DataFrame Preview")
-            st.dataframe(df)
-            
-            # Convert to CSV
-            csv = df.to_csv(index=False).encode('utf-8')
-            
-            # Download button for CSV
-            st.download_button(
-                label="⬇️ Download CSV",
-                data=csv,
-                file_name=f"{uploaded_pdf.name.split('.')[0]}_extracted.csv",
-                mime="text/csv",
-                key=f"csv_{uploaded_pdf.name}"
-            )
-        else:
-            st.warning("No parts data found to convert to CSV.")
-            
-    except Exception as e:
-        st.error(f"Error converting to CSV: {str(e)}")
-
 if st.button("🚀 Extract Information", type="primary"):
     # Update settings from widgets before processing
     update_settings_from_widgets()
@@ -777,7 +731,7 @@ if st.button("🚀 Extract Information", type="primary"):
             with tab2:
                 st.code(json.dumps(result, indent=2), language='json')
 
-            # DOWNLOAD
+            # DOWNLOAD JSON
             json_bytes = json.dumps(result, indent=2).encode("utf-8")
             st.download_button(
                 label="⬇️ Download JSON",
@@ -787,11 +741,78 @@ if st.button("🚀 Extract Information", type="primary"):
                 key=f"download_{uploaded_pdf.name}"
             )
 
+            # ADD THIS SECTION FOR CSV CONVERSION
+            st.divider()
+            
+            # Convert JSON to CSV
+            try:
+                # Extract all parts from all pages
+                all_parts_data = []
+                
+                for page_result in result:
+                    page_num = page_result['page']
+                    page_data = page_result['data']
+                    
+                    # Check if this page has parts
+                    if 'parts' in page_data and page_data['parts']:
+                        for part in page_data['parts']:
+                            # Create a flat dictionary for this part
+                            flat_part = {
+                                'page': page_num,
+                                'drawing_id': page_data.get('drawing_meta', {}).get('drawing_id', ''),
+                                'scale': page_data.get('drawing_meta', {}).get('scale', ''),
+                                'part_mark': part.get('part_mark', ''),
+                                'profile_type': part.get('profile_type', ''),
+                                'material': part.get('material', ''),
+                                'quantity': part.get('quantity', ''),
+                                'length_mm': part.get('length_mm', ''),
+                                'area': part.get('area', ''),
+                                'weight': part.get('weight', ''),
+                                'subassembly': part.get('subassembly', ''),
+                            }
+                            
+                            # Add holes count if available
+                            if 'holes' in part and part['holes']:
+                                flat_part['holes_count'] = len(part['holes'])
+                                flat_part['holes_info'] = '; '.join([f"{h.get('count', '')}xØ{h.get('diameter_mm', '')}" 
+                                                                    for h in part['holes']])
+                            else:
+                                flat_part['holes_count'] = 0
+                                flat_part['holes_info'] = ''
+                            
+                            all_parts_data.append(flat_part)
+                
+                # Create DataFrame
+                if all_parts_data:
+                    df = pd.DataFrame(all_parts_data)
+                    
+                    # Convert to CSV
+                    csv_bytes = df.to_csv(index=False).encode('utf-8')
+                    
+                    # Download CSV button
+                    st.download_button(
+                        label="📊 Download CSV",
+                        data=csv_bytes,
+                        file_name=f"{uploaded_pdf.name.split('.')[0]}_extracted.csv",
+                        mime="text/csv",
+                        key=f"csv_{uploaded_pdf.name}"
+                    )
+                    
+                    # Optional: Show preview
+                    with st.expander("📋 CSV Preview", expanded=False):
+                        st.dataframe(df)
+                else:
+                    st.info("No parts data available for CSV conversion.")
+                    
+            except Exception as e:
+                st.warning(f"Could not create CSV: {str(e)}")
+
             # CLEANUP
             try:
                 os.remove(pdf_path)
             except:
                 pass
+
 
 st.divider()
 st.caption("⚙️ Vision + OCR + LLM | No hardcoded fields | Engineering-grade extraction")
