@@ -12,6 +12,8 @@ from openai import OpenAI
 import PyPDF2 
 from dotenv import load_dotenv
 import json5
+import pandas as pd
+import json
 
 load_dotenv()
 
@@ -680,6 +682,52 @@ uploaded_files = st.file_uploader(
     type=["pdf"],
     accept_multiple_files=True
 )
+
+# In the main processing section, after displaying results, add:
+if st.button("📊 Convert to CSV", type="secondary"):
+    # Flatten the JSON data into a DataFrame
+    try:
+        # Extract parts from all pages
+        all_parts = []
+        for page_result in result:
+            page_data = page_result['data']
+            page_num = page_result['page']
+            
+            # Check if parts exist in this page
+            if 'parts' in page_data and page_data['parts']:
+                for part in page_data['parts']:
+                    # Add page number to each part
+                    part_with_meta = part.copy()
+                    part_with_meta['page'] = page_num
+                    if 'drawing_meta' in page_data:
+                        part_with_meta['drawing_id'] = page_data['drawing_meta'].get('drawing_id', '')
+                        part_with_meta['scale'] = page_data['drawing_meta'].get('scale', '')
+                    all_parts.append(part_with_meta)
+        
+        if all_parts:
+            # Normalize the nested JSON structure
+            df = pd.json_normalize(all_parts)
+            
+            # Display the DataFrame
+            st.subheader("📋 DataFrame Preview")
+            st.dataframe(df)
+            
+            # Convert to CSV
+            csv = df.to_csv(index=False).encode('utf-8')
+            
+            # Download button for CSV
+            st.download_button(
+                label="⬇️ Download CSV",
+                data=csv,
+                file_name=f"{uploaded_pdf.name.split('.')[0]}_extracted.csv",
+                mime="text/csv",
+                key=f"csv_{uploaded_pdf.name}"
+            )
+        else:
+            st.warning("No parts data found to convert to CSV.")
+            
+    except Exception as e:
+        st.error(f"Error converting to CSV: {str(e)}")
 
 if st.button("🚀 Extract Information", type="primary"):
     # Update settings from widgets before processing
