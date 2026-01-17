@@ -7,3 +7,4 @@ groq
 anthropic 
 json5 
 python-dotenv
+PyPDF2

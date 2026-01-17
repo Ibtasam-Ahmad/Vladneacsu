@@ -9,7 +9,7 @@ import tempfile
 from groq import Groq
 import anthropic
 from openai import OpenAI
-import camelot
+import PyPDF2 
 from dotenv import load_dotenv
 import json5
 
@@ -135,15 +135,23 @@ def pdf_to_images(pdf_path, dpi=150):
 
 
 def extract_ocr(pdf_path, page):
+    """
+    Extract text from PDF page using PyPDF2
+    """
     try:
-        tables = camelot.read_pdf(
-            pdf_path,
-            pages=str(page),
-            flavor="stream",
-            edge_tol=500
-        )
-        return "\n".join(t.df.to_string(index=False) for t in tables)
-    except:
+        with open(pdf_path, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            
+            # Check if page exists
+            if page > len(pdf_reader.pages):
+                return ""
+            
+            # Extract text from the specific page (page is 1-indexed)
+            text = pdf_reader.pages[page-1].extract_text()
+            return text if text else ""
+    
+    except Exception as e:
+        st.warning(f"PyPDF2 extraction warning for page {page}: {str(e)}")
         return ""
 
 
@@ -618,19 +626,11 @@ with st.expander("📦 Installation Requirements", expanded=False):
     st.markdown("""
     ### Required Packages:
     ```bash
-    pip install streamlit pillow pymupdf camelot-py openai groq anthropic json5 python-dotenv
+    pip install streamlit pillow pymupdf PyPDF2 openai groq anthropic json5 python-dotenv
     ```
     
-    ### For PDF table extraction (optional but recommended):
-    ```bash
-    # Install GhostScript for Camelot
-    # Ubuntu/Debian:
-    sudo apt-get install ghostscript
-    
-    # macOS:
-    brew install ghostscript
-    
-    # Windows:
-    # Download from: https://www.ghostscript.com/download/gsdnld.html
-    ```
+    ### Note:
+    - **PyPDF2** replaces Camelot for text extraction (simpler, no external dependencies)
+    - **pymupdf** (fitz) is still used for PDF to image conversion
+    - No need for GhostScript installation anymore
     """)
